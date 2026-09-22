@@ -315,10 +315,108 @@
 <section id="e-feel" class="slide" data-theme="dark" style="color:#F5EFE4; font-family:'Inter', Arial, sans-serif; padding:128px 128px 160px; display:flex; flex-direction:column; gap:40px">
 <div style="display:flex; flex-direction:column; gap:14px"><p style="font-size:26px; font-weight:700; letter-spacing:4px; text-transform:uppercase; line-height:1.2; color:#FFAE00; ">Experience</p><h2 style="font-family:'Inter', Arial, sans-serif; font-size:64px; font-weight:700; line-height:1.08; color:#F5EFE4; ">What does your viewer feel?</h2></div>
 <p style="font-size:34px; font-weight:400; line-height:1.4; color:#CFC5B4; ">Many renders lack experience. Not the years of rendering: the feeling.</p>
-<div style="display:flex; flex-direction:column; border-bottom:2px solid #3A322A"><div style="display:flex; flex-direction:row; align-items:center; gap:32px; padding:22px 0; border-top:2px solid #3A322A"><p style="width:110px; font-family:'Inter', Arial, sans-serif; font-size:48px; font-weight:800; color:#FFAE00">01</p><p style="flex:1; font-size:44px; font-weight:500; line-height:1.2; color:#F5EFE4">Are you in awe?</p></div><div style="display:flex; flex-direction:row; align-items:center; gap:32px; padding:22px 0; border-top:2px solid #3A322A"><p style="width:110px; font-family:'Inter', Arial, sans-serif; font-size:48px; font-weight:800; color:#FFAE00">02</p><p style="flex:1; font-size:44px; font-weight:500; line-height:1.2; color:#F5EFE4">Are you excited to see the design solved?</p></div><div style="display:flex; flex-direction:row; align-items:center; gap:32px; padding:22px 0; border-top:2px solid #3A322A"><p style="width:110px; font-family:'Inter', Arial, sans-serif; font-size:48px; font-weight:800; color:#FFAE00">03</p><p style="flex:1; font-size:44px; font-weight:500; line-height:1.2; color:#F5EFE4">Does it feel a little nostalgic?</p></div><div style="display:flex; flex-direction:row; align-items:center; gap:32px; padding:22px 0; border-top:2px solid #3A322A"><p style="width:110px; font-family:'Inter', Arial, sans-serif; font-size:48px; font-weight:800; color:#FFAE00">04</p><p style="flex:1; font-size:44px; font-weight:500; line-height:1.2; color:#F5EFE4">Or does it just feel cool to watch?</p></div></div>
+<div id="e-feel-cards" style="position:relative; flex:1"><div class="feel-card" data-cx="0.03" data-cy="0.1" data-amp="58,44" data-rot="4" data-speed="0.16,0.12,0.07" data-phase="0.0,1.1,0.0" style="position:absolute; max-width:380px; background:#221D17; border:2px solid #3A322A; border-radius:28px; padding:32px 36px; box-shadow:0 18px 40px rgba(0,0,0,.35); cursor:grab; touch-action:none; user-select:none; -webkit-user-select:none"><p style="font-size:32px; font-weight:500; line-height:1.3; color:#F5EFE4; pointer-events:none">Are you in awe?</p></div><div class="feel-card" data-cx="0.68" data-cy="0.13" data-amp="58,44" data-rot="3" data-speed="0.195,0.161,0.091" data-phase="1.7,3.4,0.9" style="position:absolute; max-width:460px; background:#221D17; border:2px solid #3A322A; border-radius:28px; padding:32px 36px; box-shadow:0 18px 40px rgba(0,0,0,.35); cursor:grab; touch-action:none; user-select:none; -webkit-user-select:none"><p style="font-size:32px; font-weight:500; line-height:1.3; color:#F5EFE4; pointer-events:none">Are you excited to see the design solved?</p></div><div class="feel-card" data-cx="0.08" data-cy="0.62" data-amp="58,44" data-rot="2.5" data-speed="0.23,0.202,0.112" data-phase="3.4,5.7,1.8" style="position:absolute; max-width:400px; background:#221D17; border:2px solid #3A322A; border-radius:28px; padding:32px 36px; box-shadow:0 18px 40px rgba(0,0,0,.35); cursor:grab; touch-action:none; user-select:none; -webkit-user-select:none"><p style="font-size:32px; font-weight:500; line-height:1.3; color:#F5EFE4; pointer-events:none">Does it feel a little nostalgic?</p></div><div class="feel-card" data-cx="0.68" data-cy="0.64" data-amp="58,44" data-rot="3" data-speed="0.265,0.243,0.133" data-phase="5.1,8.0,2.7" style="position:absolute; max-width:440px; background:#221D17; border:2px solid #3A322A; border-radius:28px; padding:32px 36px; box-shadow:0 18px 40px rgba(0,0,0,.35); cursor:grab; touch-action:none; user-select:none; -webkit-user-select:none"><p style="font-size:32px; font-weight:500; line-height:1.3; color:#F5EFE4; pointer-events:none">Or does it just feel cool to watch?</p></div></div><script>
+(function(){
+  var zone = document.getElementById('e-feel-cards');
+  var slide = document.getElementById('e-feel');
+  if (!zone || !slide) return;
+  var cards = Array.prototype.slice.call(zone.querySelectorAll('.feel-card')).map(function(el){
+    var amp = el.dataset.amp.split(',').map(Number);
+    var speed = el.dataset.speed.split(',').map(Number);
+    var phase = el.dataset.phase.split(',').map(Number);
+    return {
+      el: el, cx: +el.dataset.cx, cy: +el.dataset.cy, rotAmp: +el.dataset.rot,
+      ampX: amp[0], ampY: amp[1], sx: speed[0], sy: speed[1], sr: speed[2],
+      px: phase[0], py: phase[1], pr: phase[2],
+      dragging: false, released: false, homeX: 0, homeY: 0, dx: 0, dy: 0,
+      releasedAt: -1e9, grabX: 0, grabY: 0, cw: 0, ch: 0, measured: false
+    };
+  });
+
+  function measure(){
+    var zw = zone.offsetWidth, zh = zone.offsetHeight;
+    cards.forEach(function(c){ c.cw = c.el.offsetWidth; c.ch = c.el.offsetHeight; c.measured = true; });
+    return { zw: zw, zh: zh };
+  }
+  var needsRemeasure = true;
+  addEventListener('resize', function(){ needsRemeasure = true; });
+
+  function stageScale(){
+    var zr = zone.getBoundingClientRect();
+    return zone.offsetWidth ? zr.width / zone.offsetWidth : 1;
+  }
+
+  function frame(t){
+    requestAnimationFrame(frame);
+    if (!slide.classList.contains('active')) return;
+    if (needsRemeasure) { measure(); needsRemeasure = false; }
+    var zw = zone.offsetWidth, zh = zone.offsetHeight;
+    var time = t / 1000;
+    cards.forEach(function(c){
+      if (!c.measured) return;
+      var baseX = c.released ? c.homeX : c.cx * zw;
+      var baseY = c.released ? c.homeY : c.cy * zh;
+      if (c.dragging) {
+        var rot = Math.sin(time * c.sr + c.pr) * c.rotAmp * 0.35;
+        c.el.style.transform = 'translate(' + c.dx + 'px,' + c.dy + 'px) rotate(' + rot + 'deg)';
+        return;
+      }
+      var mX = Math.max(12, Math.min(c.ampX, baseX, zw - baseX - c.cw));
+      var mY = Math.max(12, Math.min(c.ampY, baseY, zh - baseY - c.ch));
+      var ramp = Math.min(1, (t - c.releasedAt) / 800);
+      var ox = Math.sin(time * c.sx + c.px) * mX * ramp;
+      var oy = Math.cos(time * c.sy + c.py) * mY * ramp;
+      var rot2 = Math.sin(time * c.sr + c.pr) * c.rotAmp;
+      c.el.style.transform = 'translate(' + (baseX + ox) + 'px,' + (baseY + oy) + 'px) rotate(' + rot2 + 'deg)';
+    });
+  }
+  requestAnimationFrame(frame);
+
+  cards.forEach(function(c){
+    var el = c.el;
+    el.addEventListener('pointerdown', function(e){
+      e.stopPropagation();
+      try { el.setPointerCapture(e.pointerId); } catch(err){}
+      var s = stageScale();
+      var er = el.getBoundingClientRect();
+      c.grabX = (e.clientX - er.left) / s;
+      c.grabY = (e.clientY - er.top) / s;
+      c.dragging = true;
+      el.style.cursor = 'grabbing';
+      el.style.zIndex = 5;
+      el.style.boxShadow = '0 26px 55px rgba(0,0,0,.5)';
+    });
+    el.addEventListener('pointermove', function(e){
+      if (!c.dragging) return;
+      e.stopPropagation();
+      var s = stageScale();
+      var zr = zone.getBoundingClientRect();
+      var zw = zone.offsetWidth, zh = zone.offsetHeight;
+      var x = (e.clientX - zr.left) / s - c.grabX;
+      var y = (e.clientY - zr.top) / s - c.grabY;
+      x = Math.max(-c.cw * 0.25, Math.min(zw - c.cw * 0.75, x));
+      y = Math.max(-c.ch * 0.25, Math.min(zh - c.ch * 0.75, y));
+      c.dx = x; c.dy = y;
+    });
+    function release(e){
+      if (!c.dragging) return;
+      e.stopPropagation();
+      c.dragging = false;
+      c.released = true;
+      c.homeX = c.dx; c.homeY = c.dy;
+      c.releasedAt = performance.now();
+      el.style.cursor = 'grab';
+      el.style.zIndex = '';
+      el.style.boxShadow = '0 18px 40px rgba(0,0,0,.35)';
+    }
+    el.addEventListener('pointerup', release);
+    el.addEventListener('pointercancel', release);
+  });
+})();
+</script>
 <p style="position:absolute; left:128px; bottom:64px; width:800px; font-size:24px; letter-spacing:3px; text-transform:uppercase; color:#CFC5B4">03 · Experience</p>
 <p style="position:absolute; left:1000px; bottom:64px; width:792px; font-size:24px; letter-spacing:3px; text-transform:uppercase; text-align:right; color:#CFC5B4">JuRaCa · Beyond the Blueprint</p>
-<aside>Experience is the key that is always lacking in some architecture and interior renders. I do not mean rendering experience. I mean a feeling: awe, excitement, nostalgia, or just that it feels cool to watch.</aside>
+<aside>Experience is the key that is always lacking in some architecture and interior renders. I do not mean rendering experience. I mean a feeling: awe, excitement, nostalgia, or just that it feels cool to watch. On the live site these questions drift and can be dragged around; here they sit in a fixed scattered arrangement.</aside>
 </section>
 
 <!-- 17 · e-pillars -->
@@ -1007,14 +1105,14 @@ $('#ovClose').onclick = closeOverview;
 $('#qrBtn').onclick = toggleQr; $('#qrClose').onclick = () => document.body.classList.remove('qr');
 
 $('#viewport').addEventListener('click', e => {
-  if (isAudience || e.target.closest('a')) return;
+  if (isAudience || e.target.closest('a') || e.target.closest('.feel-card')) return;
   bg.ripple(e.clientX, e.clientY);
   e.clientX > innerWidth * .3 ? next() : prev();
 });
-let tx = 0, ty = 0;
-$('#viewport').addEventListener('touchstart', e => { tx = e.touches[0].clientX; ty = e.touches[0].clientY; }, { passive: true });
+let tx = 0, ty = 0, tOnCard = false;
+$('#viewport').addEventListener('touchstart', e => { tx = e.touches[0].clientX; ty = e.touches[0].clientY; tOnCard = !!e.target.closest('.feel-card'); }, { passive: true });
 $('#viewport').addEventListener('touchend', e => {
-  if (isAudience) return;
+  if (isAudience || tOnCard) return;
   const dx = e.changedTouches[0].clientX - tx, dy = e.changedTouches[0].clientY - ty;
   if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.4) { e.preventDefault(); dx < 0 ? next() : prev(); }
 });
