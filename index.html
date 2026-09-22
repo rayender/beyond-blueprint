@@ -21,7 +21,23 @@
      index.html and list them in CONFIG.images (bottom of the file).
   3. Deploy: any static host works. On Vercel, drop this folder in a repo (or drag it
      into a new project). No build step needed.
-  Keys: → / Space next · ← back · Home / End · F fullscreen · O overview · N notes
+  Keys (presenter): → / Space next · ← back · Home / End · F fullscreen · O overview
+                     · N notes · Q your QR code
+
+  ── LIVE PRESENTING (CONFIG.live, in the script below) ──────────────────────
+  The plain link — the one in the QR code — is AUDIENCE mode: locked to
+  whatever slide you're on, no controls. Add ?present=<the secret from
+  live-sync.sql> to the same link to get PRESENTER mode: your normal full
+  controls, plus every slide change is pushed live to everyone on the plain
+  link. Press Q (or tap the QR button) to show the audience link as a QR code
+  on your own screen.
+    - Only you should ever open the ?present=... link. It's a plain URL
+      param, not real authentication — good enough for "don't hand this one
+      out," not for anything higher-stakes.
+    - Set CONFIG.live.enabled to false to turn this off entirely and present
+      normally (full controls for anyone), e.g. for rehearsal.
+    - The Supabase table + functions this depends on are in live-sync.sql —
+      re-run it (safe to repeat) if you ever need a new secret.
   ─────────────────────────────────────────────────────────────────────────────
 -->
 
@@ -107,6 +123,27 @@
     .slide.active,.slide.leaving{animation:none}
     #progress{transition:none}
   }
+
+  /* live sync: presenter-only QR button, and a small always-on status pill */
+  #qrBtn{display:none}
+  body.presenter #qrBtn{display:grid}
+  body.audience #prev,body.audience #next,body.audience #ovBtn,body.audience #notesBtn{display:none}
+
+  #liveBadge{display:none;position:fixed;left:18px;bottom:18px;z-index:25;padding:8px 16px 8px 12px;border-radius:999px;
+    background:rgba(22,19,15,.78);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
+    border:1px solid rgba(245,239,228,.16);color:#F5EFE4;font:600 13px 'Inter',Arial,sans-serif;letter-spacing:.3px;
+    align-items:center;gap:8px}
+  body.presenter #liveBadge,body.audience #liveBadge{display:flex}
+  #liveBadge .dot{width:8px;height:8px;border-radius:50%;background:#3DDC84;flex-shrink:0;transition:background .3s}
+  #liveBadge.bad .dot{background:#F86004}
+
+  #qrPanel{display:none;position:fixed;inset:0;z-index:32;background:rgba(22,19,15,.94);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);
+    flex-direction:column;align-items:center;justify-content:center;gap:22px}
+  body.qr #qrPanel{display:flex}
+  #qrCanvas{border-radius:22px;background:#F5EFE4;padding:22px;width:min(440px,62vw);height:min(440px,62vw)}
+  #qrUrl{font:600 20px 'Inter',Arial,sans-serif;color:#F5EFE4;letter-spacing:.2px;text-align:center;max-width:90vw;word-break:break-all}
+  #qrClose{position:fixed;right:22px;top:16px;appearance:none;border:1px solid rgba(245,239,228,.25);background:transparent;color:#F5EFE4;
+    font:600 15px 'Inter',Arial,sans-serif;padding:10px 18px;border-radius:999px;cursor:pointer;z-index:33}
 </style>
 </head>
 <body>
@@ -556,7 +593,16 @@
   <button id="ovBtn" aria-label="Slide overview (O)"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="6.5" height="6.5" rx="1"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1"/></svg></button>
   <button id="notesBtn" aria-label="Speaker notes (N)"><svg viewBox="0 0 24 24"><path d="M5 5h14v10H9l-4 4z"/><path d="M9 9h6M9 12h4"/></svg></button>
   <button id="fsBtn" aria-label="Fullscreen (F)"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+  <button id="qrBtn" aria-label="Show audience QR code (Q)"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><path d="M14 14h3v3h-3zM20 14v3M14 20h3M20 20v.01"/></svg></button>
 </nav>
+
+<div id="liveBadge" aria-live="polite"><span class="dot"></span><span id="liveLabel"></span></div>
+
+<div id="qrPanel" role="dialog" aria-label="Audience link QR code" aria-modal="true">
+  <button id="qrClose">Close (Esc)</button>
+  <canvas id="qrCanvas" width="440" height="440"></canvas>
+  <p id="qrUrl"></p>
+</div>
 
 <div id="overview" role="dialog" aria-label="All slides" aria-modal="true">
   <button id="ovClose">Close (Esc)</button>
@@ -564,6 +610,11 @@
 </div>
 
 <noscript><p style="position:fixed;inset:auto 0 40% 0;text-align:center;font:24px sans-serif;color:#F5EFE4">This presentation needs JavaScript.</p></noscript>
+
+<!-- Live sync (presenter → audience) and the presenter's QR code. Loaded
+     synchronously so their globals exist before the main script runs. -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1/build/qrcode.min.js"></script>
 
 <script>
 (() => {
@@ -584,7 +635,22 @@ const CONFIG = {
   // intensity = strength of the burst on each slide change (1 = default, 0 = off, 2 = stronger).
   motion: { density: 1, intensity: 1 },
   // Show the small key-hint bar when the deck opens.
-  showHint: true
+  showHint: true,
+  // Live presenter → audience sync. With enabled:true, this page behaves
+  // one of two ways depending on the URL:
+  //   - Plain link (what you hand out / put in the QR code): AUDIENCE mode.
+  //     Locked to whatever slide the presenter is on; no controls shown.
+  //   - Link with ?present=<key> matching presenterKey below: PRESENTER
+  //     mode. Normal full controls, and every slide change gets pushed live.
+  // Set enabled:false to turn this off entirely and present normally, with
+  // full controls for anyone who opens the link (e.g. for rehearsal).
+  live: {
+    enabled: true,
+    sessionId: 'beyond-the-blueprint',
+    supabaseUrl: 'https://arzvqbvretwwhlhphrvp.supabase.co',
+    supabaseKey: 'sb_publishable_AdH5vgRHGAZnbz3DGoKowg_wcZs6dHU',
+    pollMs: 1200
+  }
 };
 
 /* Logos (embedded so this file stays self-contained). */
@@ -622,6 +688,71 @@ $$('img[data-slot]').forEach(img => {
   }
 });
 $$('.slide a[href]').forEach(a => { a.target = '_blank'; a.rel = 'noopener'; });
+
+/* ═══════════════════════════════ live sync (presenter → audience) ═══════════════════════════════
+   Two roles, told apart purely by the URL:
+   - Presenter: opened with ?present=<key>. Normal full controls; every
+     slide change is pushed live. The key is never stored in this file —
+     it only ever exists in the URL and gets forwarded to the database,
+     which is the one place that actually checks it (see live-sync.sql).
+   - Audience: the plain link. Locked to whatever slide the presenter is
+     on; no navigation controls at all, just a live view.
+   With CONFIG.live.enabled:false, neither role applies and the deck
+   behaves exactly as a normal, fully-controllable presentation.        */
+const LIVE = CONFIG.live || { enabled: false };
+const presentKey = LIVE.enabled ? new URLSearchParams(location.search).get('present') : null;
+const isPresenter = !!presentKey;
+const isAudience = LIVE.enabled && !isPresenter;
+document.body.classList.toggle('presenter', isPresenter);
+document.body.classList.toggle('audience', isAudience);
+
+let sb = null;
+if ((isPresenter || isAudience) && typeof supabase !== 'undefined' && LIVE.supabaseUrl) {
+  try { sb = supabase.createClient(LIVE.supabaseUrl, LIVE.supabaseKey); } catch (e) { sb = null; }
+}
+
+const liveLabel = $('#liveLabel'), liveBadge = $('#liveBadge');
+function setLive(ok, label) {
+  liveBadge.classList.toggle('bad', !ok);
+  liveLabel.textContent = label;
+}
+
+async function pushSlide(n) {
+  if (!sb) { setLive(false, 'Not connected'); return; }
+  try {
+    const { data, error } = await sb.rpc('set_slide', { p_id: LIVE.sessionId, p_secret: presentKey, p_slide: n });
+    if (error) setLive(false, 'Sync error');
+    else if (data === false) setLive(false, 'Wrong presenter key');
+    else setLive(true, 'Live — pushing to audience');
+  } catch (e) { setLive(false, 'Sync error'); }
+}
+
+async function pollSlide() {
+  if (!sb) { setLive(false, 'Not connected'); return; }
+  try {
+    const { data, error } = await sb.rpc('get_slide', { p_id: LIVE.sessionId });
+    if (error || !data || !data.length) { setLive(false, 'Reconnecting…'); return; }
+    setLive(true, 'Following live');
+    if (typeof data[0].slide_index === 'number' && data[0].slide_index !== idx) show(data[0].slide_index);
+  } catch (e) { setLive(false, 'Reconnecting…'); }
+}
+
+function audienceUrl() {
+  const u = new URL(location.href);
+  u.search = ''; u.hash = '';
+  return u.toString();
+}
+function buildQr() {
+  const url = audienceUrl();
+  $('#qrUrl').textContent = url;
+  if (typeof QRCode !== 'undefined') {
+    QRCode.toCanvas($('#qrCanvas'), url, { width: 440, margin: 2, color: { dark: '#16130F', light: '#F5EFE4' } }, () => {});
+  }
+}
+function toggleQr() {
+  document.body.classList.toggle('qr');
+  if (document.body.classList.contains('qr')) buildQr();
+}
 
 /* ═══════════════════════════════ animated background ═══════════════════════════════
    A drifting field of connected points ("Creativity is just connecting things").
@@ -846,9 +977,10 @@ function show(n, dir, initial) {
   try { history.replaceState(null, '', '#' + (n + 1)); } catch (e) {}
   $$('.thumb').forEach((t, i) => t.classList.toggle('cur', i === n));
   $$('video', next).forEach(v => { try { v.currentTime = 0; v.play(); } catch (e) {} });
+  if (isPresenter) pushSlide(n);
 }
-const next = () => show(idx + 1, 1);
-const prev = () => show(idx - 1, -1);
+const next = () => { if (!isAudience) show(idx + 1, 1); };
+const prev = () => { if (!isAudience) show(idx - 1, -1); };
 
 /* fit 16:9 stage to any window */
 function fit() {
@@ -879,10 +1011,10 @@ function sizeThumbs() {
   $('#overview').style.setProperty('--ts', t.clientWidth / 1920);
   $$('.thumb .slide').forEach(s => s.style.setProperty('--ts', t.clientWidth / 1920));
 }
-function openOverview() { buildOverview(); document.body.classList.add('ov'); sizeThumbs(); const c = $('.thumb.cur'); if (c) c.focus({ preventScroll: false }); }
+function openOverview() { if (isAudience) return; buildOverview(); document.body.classList.add('ov'); sizeThumbs(); const c = $('.thumb.cur'); if (c) c.focus({ preventScroll: false }); }
 function closeOverview() { document.body.classList.remove('ov'); }
 const toggleOverview = () => document.body.classList.contains('ov') ? closeOverview() : openOverview();
-const toggleNotes = () => document.body.classList.toggle('notes');
+const toggleNotes = () => { if (!isAudience) document.body.classList.toggle('notes'); };
 function toggleFs() {
   if (document.fullscreenElement) document.exitFullscreen();
   else if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
@@ -891,12 +1023,14 @@ function toggleFs() {
 /* input */
 addEventListener('keydown', e => {
   if (e.metaKey || e.ctrlKey || e.altKey) return;
+  if (document.body.classList.contains('qr')) { if (e.key === 'Escape' || e.key === 'q' || e.key === 'Q') document.body.classList.remove('qr'); return; }
   const ov = document.body.classList.contains('ov');
   switch (e.key) {
     case 'Escape': if (ov) closeOverview(); return;
     case 'o': case 'O': case 'g': case 'G': toggleOverview(); return;
+    case 'q': case 'Q': if (isPresenter) toggleQr(); return;
   }
-  if (ov) return;
+  if (ov || isAudience) { if (e.key === 'f' || e.key === 'F') toggleFs(); return; }
   switch (e.key) {
     case 'ArrowRight': case 'ArrowDown': case 'PageDown': case ' ': case 'Enter': e.preventDefault(); next(); break;
     case 'ArrowLeft': case 'ArrowUp': case 'PageUp': case 'Backspace': e.preventDefault(); prev(); break;
@@ -909,19 +1043,21 @@ addEventListener('keydown', e => {
 $('#prev').onclick = prev; $('#next').onclick = next;
 $('#ovBtn').onclick = toggleOverview; $('#notesBtn').onclick = toggleNotes; $('#fsBtn').onclick = toggleFs;
 $('#ovClose').onclick = closeOverview;
+$('#qrBtn').onclick = toggleQr; $('#qrClose').onclick = () => document.body.classList.remove('qr');
 
 $('#viewport').addEventListener('click', e => {
-  if (e.target.closest('a')) return;
+  if (isAudience || e.target.closest('a')) return;
   bg.ripple(e.clientX, e.clientY);
   e.clientX > innerWidth * .3 ? next() : prev();
 });
 let tx = 0, ty = 0;
 $('#viewport').addEventListener('touchstart', e => { tx = e.touches[0].clientX; ty = e.touches[0].clientY; }, { passive: true });
 $('#viewport').addEventListener('touchend', e => {
+  if (isAudience) return;
   const dx = e.changedTouches[0].clientX - tx, dy = e.changedTouches[0].clientY - ty;
   if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.4) { e.preventDefault(); dx < 0 ? next() : prev(); }
 });
-addEventListener('hashchange', () => { const n = parseInt(location.hash.slice(1), 10); if (n) show(n - 1); });
+addEventListener('hashchange', () => { if (isAudience) return; const n = parseInt(location.hash.slice(1), 10); if (n) show(n - 1); });
 
 /* auto-hide controls */
 let idleT;
@@ -931,11 +1067,21 @@ function wake() { document.body.classList.remove('idle'); clearTimeout(idleT); i
 /* start */
 addEventListener('resize', fit);
 fit();
-show(clamp((parseInt(location.hash.slice(1), 10) || 1) - 1, 0, N - 1), 1, true);
+// Audience always starts from slide 1 and is corrected to the live slide by
+// the first poll below (near-instant); a stale hash from an old visit or a
+// shared link shouldn't determine what they see.
+const startAt = isAudience ? 0 : clamp((parseInt(location.hash.slice(1), 10) || 1) - 1, 0, N - 1);
+show(startAt, 1, true);
 wake();
 const hint = $('#hint');
-if (matchMedia('(pointer: coarse)').matches) hint.textContent = 'Tap or swipe to move through the slides';
+if (isAudience) hint.textContent = 'Following along live — nothing to tap';
+else if (matchMedia('(pointer: coarse)').matches) hint.textContent = 'Tap or swipe to move through the slides';
 if (CONFIG.showHint) setTimeout(() => hint.classList.add('gone'), 5200); else hint.remove();
+
+if (isPresenter || isAudience) {
+  setLive(false, 'Connecting…');
+  if (isAudience) { pollSlide(); setInterval(pollSlide, LIVE.pollMs); }
+}
 })();
 </script>
 </body>
